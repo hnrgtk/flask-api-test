@@ -3,7 +3,6 @@ import uuid
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from sqlalchemy import desc
 from sqlalchemy_serializer import SerializerMixin
 
 # Init app
@@ -57,18 +56,18 @@ def create_board():
   db.session.commit()
   return board.to_dict(only=('id', 'name')), 201
 
-@app.route('/board/add_column', methods=["POST"])
-def add_column():
+@app.route('/board/<board_id>/add_column', methods=["POST"])
+def add_column(board_id):
   data = request.get_json()
 
   new_column = Column(
     name = data['column_name'],
     position = data['column_position'],
-    board_id = data['board_id']
+    board_id = board_id
   )
   db.session.add(new_column)
 
-  board = Board.query.filter_by(id=data['board_id']).first()
+  board = Board.query.filter_by(id=board_id).first()
   board.columns.append(new_column)
 
   db.session.add(board)
@@ -76,17 +75,17 @@ def add_column():
 
   return {"message": "Column created successfully!"}, 201
 
-@app.route('/board/add_task', methods=["POST"])
-def add_task():
+@app.route('/column/<column_id>/add_task', methods=["POST"])
+def add_task(column_id):
   data = request.get_json()
-  column = Column.query.filter_by(id=data['column_id']).first()
+  column = Column.query.filter_by(id=column_id).first()
 
   if column != None:
     new_task = Task(
       name = data.get('task_name'),
       description = data.get('task_description'),
       position = data.get('task_position'),
-      column_id = data.get('column_id'),
+      column_id = column_id,
     )
     db.session.add(column)
     db.session.add(new_task)
@@ -95,23 +94,29 @@ def add_task():
 
   return {}, 400
 
-@app.route('/board/move_task', methods=["POST"])
-def move_task():
+@app.route('/task/<task_id>/move', methods=["POST"])
+def move_task(task_id):
   data = request.get_json()
-  column_id = data.get('column_id')
-  task_id = data.get('task_id')
+  destination_column_id = data.get('destination_column_id')
+  source_column_id = data.get('source_column_id')
   new_position = data.get('task_position')
 
-  results = db.session.query(Column, Task).filter(Column.id == column_id).join(Task, Task.id == task_id).first_or_404()
+  destination = db.session.query(Column, Task).filter(Column.id == destination_column_id).join(Task, Task.id == task_id).first_or_404()
 
-  order = [x for x in results[0].tasks]
-  order.insert(new_position, results[1])
+  source_column = db.session.query(Column).filter(Column.id == source_column_id).first_or_404()
 
-  for i, task in enumerate(order):
-    task.position = i
+  destination_column_order = [x for x in destination[0].tasks]
+  source_column_order = [x for x in source_column.tasks]
+  destination_column_order.insert(new_position, destination[1])
 
-    if task.id == task_id:
-      task.column_id = column_id
+  for source_i, source_task in enumerate(source_column_order):
+    source_task.position = source_i
+
+  for destination_i, destination_task in enumerate(destination_column_order):
+    destination_task.position = destination_i
+
+    if destination_task.id == task_id:
+      destination_task.column_id = destination_column_id
 
   db.session.commit()
 
@@ -119,7 +124,7 @@ def move_task():
 
 @app.route('/board/<board_id>', methods=["GET"])
 def get_board_by_id(board_id):
-  board = db.session.query(Board).filter(Board.id == board_id).first()
+  board = Board.query.filter(Board.id == board_id).first()
   return board.to_dict(
     only=(
       'id', 'name', 
@@ -132,6 +137,20 @@ def get_board_by_id(board_id):
 def get_boards():
   boards = Board.query.all()
   return jsonify([board.to_dict(only=('id', 'name')) for board in boards]), 200
+
+@app.route("/column/<column_id>/reorder", methods=["POST"])
+def reorder_column(column_id):
+  data = request.get_json()
+  order = data.get('order')
+  requested_tasks = Task.query.filter_by(column_id=column_id).all()
+
+  for task in requested_tasks:
+    task.position = order.index(task.id)
+
+  db.session.commit()
+
+  return jsonify(message="Tasks reorder succesfully!"), 200
+
 
 if __name__ == '__main__':
   db.create_all()
