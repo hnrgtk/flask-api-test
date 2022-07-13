@@ -1,8 +1,9 @@
 import os
 import uuid
+
 from flask import Flask, jsonify, request
-from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy_serializer import SerializerMixin
 
 # Init app
@@ -11,7 +12,7 @@ CORS(app)
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 # Database config
-app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///" + os.path.join(basedir, "db.sqlite")
+app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///" + "/app/db.sqlite"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Init db
@@ -87,7 +88,6 @@ def add_task(column_id):
       position = data.get('task_position'),
       column_id = column_id,
     )
-    db.session.add(column)
     db.session.add(new_task)
     db.session.commit()
     return {"message": "Task created successfully!"}, 201
@@ -154,4 +154,4 @@ def reorder_column(column_id):
 
 if __name__ == '__main__':
   db.create_all()
-  app.run(debug=True, port=3333)
+  app.run(debug=True, host='0.0.0.0', port=3333)
